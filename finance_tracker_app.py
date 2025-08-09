@@ -1,24 +1,20 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import datetime
-import io
 import altair as alt
 from streamlit.components.v1 import html
 
 # --- Page config ---
-st.set_page_config(page_title="Personal Finance • Romil", layout="centered", initial_sidebar_state="auto")
+st.set_page_config(page_title="💰 Personal Finance Tracker", layout="centered")
 
-# --- Styles (card look, gradients, mobile-friendly) ---
+# --- CSS styles ---
 st.markdown(
     """
     <style>
-    /* Page background */
     .stApp {
         background: linear-gradient(180deg, #f7fbff 0%, #ffffff 100%);
         color: #0f172a;
     }
-    /* Rounded cards */
     .card {
         background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(250,250,255,0.9));
         border-radius: 18px;
@@ -47,37 +43,10 @@ st.markdown(
         border-radius: 10px;
         padding: 8px 12px;
     }
-    /* Make tables responsive on mobile */
     .stDataFrame table {width:100%;}
     </style>
     """,
     unsafe_allow_html=True,
-)
-
-# --- Lottie animation (header) ---
-lottie_url = "https://assets5.lottiefiles.com/packages/lf20_jbrw3hcz.json"
-html(
-    f"""
-    <div class="header card" style="background: linear-gradient(90deg,#4f46e5,#06b6d4); color: white;">
-      <div style="display:flex; align-items:center; justify-content:space-between">
-        <div>
-          <h2 style="margin:6px 0 2px 0">💠 Personal Finance Tracker</h2>
-          <div style="opacity:0.95">Smart, mobile-first budget tracking • Monthly reset • Daily logging</div>
-        </div>
-        <div style="width:80px">
-          <lottie-player 
-            src='{lottie_url}'  
-            background='transparent'  
-            speed='1'  
-            loop autoplay 
-            style="width:80px; height:80px;">
-          </lottie-player>
-        </div>
-      </div>
-    </div>
-    <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
-    """,
-    height=120,
 )
 
 # --- Persistence: CSV file in app root ---
@@ -86,7 +55,6 @@ CSV_PATH = "expenses_data.csv"
 def load_data():
     try:
         df = pd.read_csv(CSV_PATH)
-        # ensure correct types
         df['Amount'] = df['Amount'].astype(float)
     except FileNotFoundError:
         df = pd.DataFrame(columns=['Month','Date','Description','Amount'])
@@ -137,7 +105,7 @@ with st.container():
 
 st.markdown("---")
 
-# --- Expense entry card (prominent) ---
+# --- Expense entry card ---
 with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("Add Expense")
@@ -148,11 +116,11 @@ with st.container():
         amt = st.number_input("Amount", min_value=0.0, step=1.0, format="%f")
     with c3:
         quick = st.selectbox("Quick add", ["—", "5", "10", "20", "50", "100"])
-    # Quick add fills amount if chosen
+    # Quick add fills amount if chosen and amt is zero
     if quick != "—" and amt == 0.0:
         try:
             amt = float(quick)
-    except:
+        except:
             pass
 
     add_col1, add_col2 = st.columns([1,1])
@@ -177,7 +145,6 @@ with st.container():
         if st.button("↩️ Undo last", use_container_width=True):
             if st.session_state.last_action and st.session_state.last_action[0] == "add":
                 last = st.session_state.last_action[1]
-                # remove last matching row (same timestamp) for safety
                 mask = ~((df_all['Date'] == last['Date']) & (df_all['Amount'] == last['Amount']) & (df_all['Description'] == last['Description']))
                 df_all = df_all[mask]
                 save_data(df_all)
@@ -189,7 +156,7 @@ with st.container():
 
 st.markdown("---")
 
-# --- Summary cards (income, spent, remaining) ---
+# --- Summary cards ---
 df_current = df_all[df_all['Month'] == current_month]
 total_spent = df_current['Amount'].sum() if not df_current.empty else 0.0
 remaining = float(st.session_state.income) - float(total_spent)
@@ -214,33 +181,33 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Chart: spending over days in month ---
+# --- Chart: spending trend this month ---
 if not df_current.empty:
-    st.subheader("Spending trend — this month")
-    # aggregate by date
+    st.subheader("Spending Trend This Month")
     df_current['DateOnly'] = pd.to_datetime(df_current['Date']).dt.date
     agg = df_current.groupby('DateOnly', as_index=False)['Amount'].sum()
     chart = alt.Chart(agg).mark_line(point=True).encode(
         x=alt.X('DateOnly:T', title='Date'),
-        y=alt.Y('Amount:Q', title='Amount spent'),
+        y=alt.Y('Amount:Q', title='Amount Spent'),
         tooltip=['DateOnly', 'Amount']
     ).properties(width='container', height=220)
     st.altair_chart(chart, use_container_width=True)
 
-# --- Expense history table with filters & export ---
+# --- Expense History with filter & export ---
 st.subheader("Expense History")
 with st.expander("Filter & Export"):
     colf1, colf2, colf3 = st.columns([2,2,1])
     with colf1:
-        sel_month = st.selectbox("Month", options=sorted(df_all['Month'].unique().tolist()+[current_month]), index=0)
+        months = sorted(df_all['Month'].unique().tolist() + [current_month])
+        sel_month = st.selectbox("Month", options=months, index=months.index(current_month))
     with colf2:
-        text_filter = st.text_input("Search description", "")
+        text_filter = st.text_input("Search Description", "")
     with colf3:
         if st.button("Export CSV"):
-            buffer = io.StringIO()
+            buffer = pd.compat.StringIO()
             df_all.to_csv(buffer, index=False)
             st.download_button("Download expenses.csv", data=buffer.getvalue(), file_name="expenses.csv", mime="text/csv")
-    # apply filters
+
     df_filtered = df_all.copy()
     if sel_month:
         df_filtered = df_filtered[df_filtered['Month'] == sel_month]
@@ -250,16 +217,16 @@ with st.expander("Filter & Export"):
     st.dataframe(df_filtered.reset_index(drop=True))
 
 else:
-    st.info("No expenses recorded for this month yet. Add your first expense above!")
+    st.info("No expenses recorded yet. Add your first expense above!")
 
-# --- Footer quick tips ---
+# --- Footer Tips ---
 st.markdown("---")
 st.markdown(
     """
     <div class="card">
     <div class="small">Tips: Use the Quick Add dropdown for speedy logging. 
     Add a Google Calendar daily reminder to open this app and add expenses. 
-    For permanent cloud storage consider Google Sheets integration (I can add this for you).</div>
+    For permanent cloud storage consider Google Sheets integration.</div>
     </div>
     """,
     unsafe_allow_html=True,
